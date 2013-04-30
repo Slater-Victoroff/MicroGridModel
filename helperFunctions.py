@@ -178,6 +178,17 @@ def nutationAngleTerm(gregorianDateTime, constants, gregorian = True):
 	angleTerm += ascendingNodeLongitude(gregorianDateTime, gregorian)*constants[4]
 	return angleTerm 
 
+def trueEclipticObliquity(gregorianDateTime, constants, nutationFile, gregorian=True):
+	if (gregorian):
+		U = julianMillennium(julianDay(gregorianDateTime))/10.
+	else:
+		U = julianMillennium(gregorianDateTime)/10.
+	constants = np.array([84381.448,-4680.93,-1.55,1999.25,-51.38,-249.67,-39.05,7.12,27.87,5.79,2.45])
+	meanObliquity = 0
+	for (i in range(0,11)):
+		meanObliquity += (constants[i]*U**i)
+	radianMeanObliquity = (meanObliquity/3600.)*(np.pi/180.)
+	return radianMeanObliquity+nutation(gregorianDateTime,nutationFile, gregorian)[1]
 
 def parseDataToCsv(filePath):
 	with open(filePath, 'rb') as rawData:
