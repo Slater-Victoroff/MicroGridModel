@@ -141,8 +141,43 @@ def ascendingNodeLongitude(gregorianDateTime, gregorian=True):
 	firstTerm = lambda century: 125.04452-1934.136261*century
 	secondTerm = lambda century: 0.0020708*century**2
 	thirdTerm = lambda century: (century**3)/450000.0
-	degreeAnswer = firstTerm(JCE)+secondTerm(JCE)+thirdTerm(JCE)
+	degreeAnswer = firstTerm(JCE)+facesecondTerm(JCE)+thirdTerm(JCE)
 	return (degreeAnswer*np.pi)/180.
+
+def nutation(gregorianDateTime, nutationFile, gregorian=True):
+	"""Returns true obliquity in longitude and obliquity. Returns
+	it in a numpy array"""
+	if (gregorian):
+		JCE = julianCentury(julianDay(gregorianDateTime))
+	else:
+		JCE = julianCentury(gregorianDateTime)
+	longitudeDelta = 0
+	obliquityDelta = 0
+	with open(nutationFile, 'rb') as csvData:
+		reader = csv.reader(csvData, delimiter = ",")
+		for row in reader:
+			constants = [float(row[i]) for i in range(0,5)]
+			sineTerm = np.sin(nutationAngleTerm(gregorianDateTime, constants, gregorian))
+			cosineTerm = np.cos(nutationAngleTerm(gregorianDateTime, constants, gregorian))
+			longitudeDelta += (float(row[5])+(float(row[6])*JCE))*sineTerm
+			obliquityDelta += (float(row[7])+(float(row[8])*JCE))*cosineTerm
+	longitudeNutation = ((longitudeDelta/36000000.0)*np.pi)/180.
+	obliquityNutation = ((obliquityDelta/36000000.0)*np.pi)/180.
+	return np.array([longitudeNutation, obliquityNutation])
+
+
+def nutationAngleTerm(gregorianDateTime, constants, gregorian = True):
+	if (gregorian):
+		JCE = julianCentury(julianDay(gregorianDateTime))
+	else:
+		JCE = julianCentury(gregorianDateTime)
+	angleTerm = meanMoonElongation(gregorianDateTime, gregorian)*constants[0]
+	angleTerm += meanSunAnomaly(gregorianDateTime, gregorian)*constants[1]
+	angleTerm += meanMoonAnomaly(gregorianDateTime, gregorian)*constants[2]
+	angleTerm += moonLatitudeArgument(gregorianDateTime, gregorian)*constants[3]
+	angleTerm += ascendingNodeLongitude(gregorianDateTime, gregorian)*constants[4]
+	return angleTerm 
+
 
 def parseDataToCsv(filePath):
 	with open(filePath, 'rb') as rawData:
