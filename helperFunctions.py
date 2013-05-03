@@ -141,7 +141,7 @@ def ascendingNodeLongitude(gregorianDateTime, gregorian=True):
 	firstTerm = lambda century: 125.04452-1934.136261*century
 	secondTerm = lambda century: 0.0020708*century**2
 	thirdTerm = lambda century: (century**3)/450000.0
-	degreeAnswer = firstTerm(JCE)+facesecondTerm(JCE)+thirdTerm(JCE)
+	degreeAnswer = firstTerm(JCE)+secondTerm(JCE)+thirdTerm(JCE)
 	return (degreeAnswer*np.pi)/180.
 
 def nutation(gregorianDateTime, nutationFile, gregorian=True):
@@ -178,17 +178,56 @@ def nutationAngleTerm(gregorianDateTime, constants, gregorian = True):
 	angleTerm += ascendingNodeLongitude(gregorianDateTime, gregorian)*constants[4]
 	return angleTerm 
 
-def trueEclipticObliquity(gregorianDateTime, constants, nutationFile, gregorian=True):
+def trueEclipticObliquity(gregorianDateTime, nutationFile, gregorian=True):
 	if (gregorian):
 		U = julianMillennium(julianDay(gregorianDateTime))/10.
 	else:
 		U = julianMillennium(gregorianDateTime)/10.
 	constants = np.array([84381.448,-4680.93,-1.55,1999.25,-51.38,-249.67,-39.05,7.12,27.87,5.79,2.45])
 	meanObliquity = 0
-	for (i in range(0,11)):
+	for i in range(0,11):
 		meanObliquity += (constants[i]*U**i)
 	radianMeanObliquity = (meanObliquity/3600.)*(np.pi/180.)
 	return radianMeanObliquity+nutation(gregorianDateTime,nutationFile, gregorian)[1]
+
+def aberrationCorrection(gregorianDateTime, radiusFiles, gregorian=True):
+	radius = radiusVector(gregorianDateTime, radiusFiles, gregorian)
+	degreeAberation = radius*(20.4898/3600.0)
+	return degreeAberation*(np.pi/180.0)
+
+def apparentSunLongitude(gregorianDateTime, radiusFiles, nutationFile, longitudeFiles, gregorian=True):
+	longitudeNutation = nutation(gregorianDateTime, nutation, gregorian)
+	aberration = aberrationCorrection(gregorianDateTime, radiusFiles, gregorian)
+	geocentricLongitude = celestialLongitude(gregorianDateTime, longitudeFiles, gregorian, True)
+	return longitudeNutation + aberration + geocentricLongitude
+
+def apparentGreenwichSiderealTime(gregorianDateTime, nutationFile, gregorian=True):
+	if (gregorian):
+		JD = julianDay(gregorianDateTime)
+	else:
+		JD = gregorianDateTime
+	JC = julianCentury(JD)
+	dailyTerm = lambda JD: 280.46061837+360.98564736629*(JD-2451545.0)
+	centuryTerm = lambda JC: (0.000387933*JC**2)-((JC**3)/38710000.0)
+	meanSiderealTime = (dailyTerm(JD)+centuryTerm(JC))*(np.pi/180.0)
+	normalizedMeanTime = np.arccos(np.cos(meanSiderealTime))
+	longitudeNutation = nutation(gregorianDateTime, nutationFile, gregorian)[0]
+	obliquity = trueEclipticObliquity(gregorianDateTime, nutationFile, gregorian)
+	return meanSiderealTime+longitudeNutation*np.cos(obliquity)
+
+def geocentricSunCoordinates(gregorianDateTime, latitudeFiles, nutationFile, radiuFiles, longitudeFiles, gregorian=True):
+	"""returns an array containing the geocentric right ascension and declination
+	of the sun"""
+	apparentSunLongitude = apparentSunLongitude(gregorianDateTime, radiusFiles, nutationFile, longitudeFiles, gregorian)
+	trueEclipticObliquity = trueEclipticObliquity(gregorianDateTime, nutationFile, gregorian)
+	earthLatitude = celestialLatitude(gregorianDateTime, latitudeFiles, gregorian, True)
+	longitudeEcliptic = np.sin(apparentSunLongitude)*np.cos(trueEclipticObliquity)
+	latitudeEcliptic = np.tan(earthLatitude)*np.sin(trueEclipticObliquity)
+	rightAscension = np.arctan2((longitudeEcliptic-latitudeEcliptic),np.cos(apparentSunLongitude))
+	tripleProjection = np.cos(earthLatitude)*np.sin(trueEclipticObliquity)*np.sin(apparentSunLongitude)
+	crossLatitudeEcliptic = np.sin(earthLatitude)*np.cos(trueEclipticObliquity)
+	declination = np.arcsin(tripleProjection+crossLatitudeEcliptic)
+	return np.array([rightAscension, declination])
 
 def parseDataToCsv(filePath):
 	with open(filePath, 'rb') as rawData:
@@ -231,4 +270,5 @@ fifthRadius = "data/radiusFiles/fifthRadius.csv"
 lagrangeFiles = [firstLagrange,secondLagrange,thirdLagrange, fourthLagrange, fifthLagrange, sixthLagrange]
 latitudeFiles = [firstLatitude, secondLatitude]
 radiusFiles = [firstRadius, secondRadius, thirdRadius, fourthRadius, fifthRadius]
-print(radiusVector(2452930.312847, radiusFiles, False))
+nutationFile = "data/nutation/nutation.csv"
+print(trueEclipticObliquity(2452930.312847, nutationFile, False))
