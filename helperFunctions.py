@@ -2,6 +2,27 @@ import csv
 import datetime
 import numpy as np
 
+firstLagrange = "data/longitudeFiles/firstLagrangePoint.csv"
+secondLagrange = "data/longitudeFiles/secondLagrangePoint.csv"
+thirdLagrange = "data/longitudeFiles/thirdLagrangePoint.csv"
+fourthLagrange = "data/longitudeFiles/fourthLagrangePoint.csv"
+fifthLagrange = "data/longitudeFiles/fifthLagrangePoint.csv"
+sixthLagrange = "data/longitudeFiles/sixthLagrangePoint.csv"
+
+firstLatitude = "data/latitudeFiles/firstLatitudePoint.csv"
+secondLatitude = "data/latitudeFiles/secondLatitudePoint.csv"
+
+firstRadius = "data/radiusFiles/firstRadius.csv"
+secondRadius = "data/radiusFiles/secondRadius.csv"
+thirdRadius = "data/radiusFiles/thirdRadius.csv"
+fourthRadius = "data/radiusFiles/fourthRadius.csv"
+fifthRadius = "data/radiusFiles/fifthRadius.csv"
+
+lagrangeFiles = [firstLagrange,secondLagrange,thirdLagrange, fourthLagrange, fifthLagrange, sixthLagrange]
+latitudeFiles = [firstLatitude, secondLatitude]
+radiusFiles = [firstRadius, secondRadius, thirdRadius, fourthRadius, fifthRadius]
+nutationFile = "data/nutation/nutation.csv"
+
 def julianDay(gregorianDateTime, calendarOffset = 0):
 	"""Conversion of gregorian calendar to julian calendar,
 	since julian gives a much more accurate stepping stone
@@ -48,7 +69,7 @@ def lagrangeTerm(julianDay, filePath):
 			lagrange += float(row[0]) * np.cos(angle)
 	return lagrange
 
-def celestialLongitude(gregorianDateTime, lagrangeFiles, gregorian=True, geocentric=False):
+def celestialLongitude(gregorianDateTime, lagrangeFiles=lagrangeFiles, gregorian=True, geocentric=False):
 	"""Expects lagrangeFiles to be ordered filepaths from 0
 	to 5. Also, this can directly take in a gregorian datetime
 	object and return the heliocentric Longitude of the earth
@@ -73,7 +94,7 @@ def celestialLongitude(gregorianDateTime, lagrangeFiles, gregorian=True, geocent
 	else:
 		return normalizedLongitude
 
-def celestialLatitude(gregorianDateTime, latitudeFiles, gregorian=True, geocentric=False):
+def celestialLatitude(gregorianDateTime, latitudeFiles=latitudeFiles, gregorian=True, geocentric=False):
 	"""Basically the same process for a few different things,
 	just breaking them up to make the function calls more
 	comprehensible"""
@@ -83,7 +104,7 @@ def celestialLatitude(gregorianDateTime, latitudeFiles, gregorian=True, geocentr
 	else:
 		return latitude
 
-def radiusVector(gregorianDateTime, radiusFiles, gregorian=True):
+def radiusVector(gregorianDateTime, radiusFiles=radiusFiles, gregorian=True):
 	"""See latitude comment"""
 	return celestialLongitude(gregorianDateTime, radiusFiles, gregorian)
 
@@ -98,7 +119,7 @@ def meanMoonElongation(gregorianDateTime, gregorian=True):
 	secondTerm = lambda century: 0.0019142*century**2
 	thirdTerm = lambda century: (century**3)/189474.0
 	degreeAnswer = firstTerm(JCE)-secondTerm(JCE)+thirdTerm(JCE)
-	return (degreeAnswer*np.pi)/180.
+	return degreesToRadians(degreeAnswer)
 
 def meanSunAnomaly(gregorianDateTime, gregorian=True):
 	if (gregorian):
@@ -109,7 +130,7 @@ def meanSunAnomaly(gregorianDateTime, gregorian=True):
 	secondTerm = lambda century: 0.000163*century**2
 	thirdTerm = lambda century: (century**3)/300000.0
 	degreeAnswer = firstTerm(JCE)-secondTerm(JCE)-thirdTerm(JCE)
-	return (degreeAnswer*np.pi)/180.
+	return degreesToRadians(degreeAnswer)
 
 def meanMoonAnomaly(gregorianDateTime, gregorian=True):
 	if (gregorian):
@@ -120,7 +141,7 @@ def meanMoonAnomaly(gregorianDateTime, gregorian=True):
 	secondTerm = lambda century: 0.0086972*century**2
 	thirdTerm = lambda century: (century**3)/56250.0
 	degreeAnswer = firstTerm(JCE)+secondTerm(JCE)+thirdTerm(JCE)
-	return (degreeAnswer*np.pi)/180.
+	return degreesToRadians(degreeAnswer)
 
 def moonLatitudeArgument(gregorianDateTime, gregorian=True):
 	if (gregorian):
@@ -131,7 +152,7 @@ def moonLatitudeArgument(gregorianDateTime, gregorian=True):
 	secondTerm = lambda century: 0.0036825*century**2
 	thirdTerm = lambda century: (century**3)/327270.0
 	degreeAnswer = firstTerm(JCE)-secondTerm(JCE)+thirdTerm(JCE)
-	return (degreeAnswer*np.pi)/180.
+	return degreesToRadians(degreeAnswer)
 
 def ascendingNodeLongitude(gregorianDateTime, gregorian=True):
 	if (gregorian):
@@ -142,9 +163,9 @@ def ascendingNodeLongitude(gregorianDateTime, gregorian=True):
 	secondTerm = lambda century: 0.0020708*century**2
 	thirdTerm = lambda century: (century**3)/450000.0
 	degreeAnswer = firstTerm(JCE)+secondTerm(JCE)+thirdTerm(JCE)
-	return (degreeAnswer*np.pi)/180.
+	return degreesToRadians(degreeAnswer)
 
-def nutation(gregorianDateTime, nutationFile, gregorian=True):
+def nutation(gregorianDateTime, nutationFile=nutationFile, gregorian=True):
 	"""Returns true obliquity in longitude and obliquity. Returns
 	it in a numpy array"""
 	if (gregorian):
@@ -161,8 +182,8 @@ def nutation(gregorianDateTime, nutationFile, gregorian=True):
 			cosineTerm = np.cos(nutationAngleTerm(gregorianDateTime, constants, gregorian))
 			longitudeDelta += (float(row[5])+(float(row[6])*JCE))*sineTerm
 			obliquityDelta += (float(row[7])+(float(row[8])*JCE))*cosineTerm
-	longitudeNutation = ((longitudeDelta/36000000.0)*np.pi)/180.
-	obliquityNutation = ((obliquityDelta/36000000.0)*np.pi)/180.
+	longitudeNutation = degreesToRadians(longitudeDelta/36000000.0)
+	obliquityNutation = degreesToRadians(obliquityDelta/36000000.0)
 	return np.array([longitudeNutation, obliquityNutation])
 
 
@@ -178,7 +199,7 @@ def nutationAngleTerm(gregorianDateTime, constants, gregorian = True):
 	angleTerm += ascendingNodeLongitude(gregorianDateTime, gregorian)*constants[4]
 	return angleTerm 
 
-def trueEclipticObliquity(gregorianDateTime, nutationFile, gregorian=True):
+def trueEclipticObliquity(gregorianDateTime, gregorian=True):
 	if (gregorian):
 		U = julianMillennium(julianDay(gregorianDateTime))/10.
 	else:
@@ -187,21 +208,21 @@ def trueEclipticObliquity(gregorianDateTime, nutationFile, gregorian=True):
 	meanObliquity = 0
 	for i in range(0,11):
 		meanObliquity += (constants[i]*U**i)
-	radianMeanObliquity = (meanObliquity/3600.)*(np.pi/180.)
-	return radianMeanObliquity+nutation(gregorianDateTime,nutationFile, gregorian)[1]
+	radianMeanObliquity = degreesToRadians(meanObliquity/3600.)
+	return radianMeanObliquity+nutation(gregorianDateTime, gregorian=gregorian)[1]
 
-def aberrationCorrection(gregorianDateTime, radiusFiles, gregorian=True):
-	radius = radiusVector(gregorianDateTime, radiusFiles, gregorian)
+def aberrationCorrection(gregorianDateTime, gregorian=True):
+	radius = radiusVector(gregorianDateTime, gregorian=gregorian)
 	degreeAberation = radius*(20.4898/3600.0)
-	return degreeAberation*(np.pi/180.0)
+	return degreesToRadians(degreeAberation)
 
-def apparentSunLongitude(gregorianDateTime, radiusFiles, nutationFile, longitudeFiles, gregorian=True):
-	longitudeNutation = nutation(gregorianDateTime, nutation, gregorian)
-	aberration = aberrationCorrection(gregorianDateTime, radiusFiles, gregorian)
-	geocentricLongitude = celestialLongitude(gregorianDateTime, longitudeFiles, gregorian, True)
+def apparentSunLongitude(gregorianDateTime, gregorian=True):
+	longitudeNutation = nutation(gregorianDateTime, gregorian=gregorian)
+	aberration = aberrationCorrection(gregorianDateTime, gregorian=gregorian)
+	geocentricLongitude = celestialLongitude(gregorianDateTime, gregorian = gregorian, geocentric=sTrue)
 	return longitudeNutation + aberration + geocentricLongitude
 
-def apparentGreenwichSiderealTime(gregorianDateTime, nutationFile, gregorian=True):
+def apparentGreenwichSiderealTime(gregorianDateTime, gregorian=True):
 	if (gregorian):
 		JD = julianDay(gregorianDateTime)
 	else:
@@ -209,18 +230,18 @@ def apparentGreenwichSiderealTime(gregorianDateTime, nutationFile, gregorian=Tru
 	JC = julianCentury(JD)
 	dailyTerm = lambda JD: 280.46061837+360.98564736629*(JD-2451545.0)
 	centuryTerm = lambda JC: (0.000387933*JC**2)-((JC**3)/38710000.0)
-	meanSiderealTime = (dailyTerm(JD)+centuryTerm(JC))*(np.pi/180.0)
+	meanSiderealTime = degreesToRadians(dailyTerm(JD)+centuryTerm(JC))
 	normalizedMeanTime = np.arccos(np.cos(meanSiderealTime))
-	longitudeNutation = nutation(gregorianDateTime, nutationFile, gregorian)[0]
-	obliquity = trueEclipticObliquity(gregorianDateTime, nutationFile, gregorian)
+	longitudeNutation = nutation(gregorianDateTime, gregorian)[0]
+	obliquity = trueEclipticObliquity(gregorianDateTime, gregorian)
 	return meanSiderealTime+longitudeNutation*np.cos(obliquity)
 
-def geocentricSunCoordinates(gregorianDateTime, latitudeFiles, nutationFile, radiuFiles, longitudeFiles, gregorian=True):
+def geocentricSunCoordinates(gregorianDateTime, gregorian=True):
 	"""returns an array containing the geocentric right ascension and declination
 	of the sun"""
-	apparentSunLongitude = apparentSunLongitude(gregorianDateTime, radiusFiles, nutationFile, longitudeFiles, gregorian)
-	trueEclipticObliquity = trueEclipticObliquity(gregorianDateTime, nutationFile, gregorian)
-	earthLatitude = celestialLatitude(gregorianDateTime, latitudeFiles, gregorian, True)
+	apparentSunLongitude = apparentSunLongitude(gregorianDateTime, gregorian=gregorian)
+	trueEclipticObliquity = trueEclipticObliquity(gregorianDateTime, gregorian=gregorian)
+	earthLatitude = celestialLatitude(gregorianDateTime, gregorian=gregorian, geocentric=True)
 	longitudeEcliptic = np.sin(apparentSunLongitude)*np.cos(trueEclipticObliquity)
 	latitudeEcliptic = np.tan(earthLatitude)*np.sin(trueEclipticObliquity)
 	rightAscension = np.arctan2((longitudeEcliptic-latitudeEcliptic),np.cos(apparentSunLongitude))
@@ -228,6 +249,17 @@ def geocentricSunCoordinates(gregorianDateTime, latitudeFiles, nutationFile, rad
 	crossLatitudeEcliptic = np.sin(earthLatitude)*np.cos(trueEclipticObliquity)
 	declination = np.arcsin(tripleProjection+crossLatitudeEcliptic)
 	return np.array([rightAscension, declination])
+
+def localHourAngle(gregorianDatTime, latitude, degrees=True, gregorian=True):
+	"""Assumes the input latitude is in degrees, because sadly that's what
+	people use instead of radians, but converting it to radians internally.
+	latitude should be positive for east of Greenwich, and negative for
+	west of Greenwich"""
+	apparentGreenwichSiderealTime = apparentGreenwichSiderealTime(gregorianDateTime, gregorian)
+	realLatitude = degreesToRadians(latitude)
+
+def degreesToRadians(degrees):
+	return degrees*(np.pi/180.0)
 
 def parseDataToCsv(filePath):
 	with open(filePath, 'rb') as rawData:
@@ -251,24 +283,4 @@ def parseDataToCsv(filePath):
 			print row
 			writer.writerow(row)
 
-firstLagrange = "data/longitudeFiles/firstLagrangePoint.csv"
-secondLagrange = "data/longitudeFiles/secondLagrangePoint.csv"
-thirdLagrange = "data/longitudeFiles/thirdLagrangePoint.csv"
-fourthLagrange = "data/longitudeFiles/fourthLagrangePoint.csv"
-fifthLagrange = "data/longitudeFiles/fifthLagrangePoint.csv"
-sixthLagrange = "data/longitudeFiles/sixthLagrangePoint.csv"
-
-firstLatitude = "data/latitudeFiles/firstLatitudePoint.csv"
-secondLatitude = "data/latitudeFiles/secondLatitudePoint.csv"
-
-firstRadius = "data/radiusFiles/firstRadius.csv"
-secondRadius = "data/radiusFiles/secondRadius.csv"
-thirdRadius = "data/radiusFiles/thirdRadius.csv"
-fourthRadius = "data/radiusFiles/fourthRadius.csv"
-fifthRadius = "data/radiusFiles/fifthRadius.csv"
-
-lagrangeFiles = [firstLagrange,secondLagrange,thirdLagrange, fourthLagrange, fifthLagrange, sixthLagrange]
-latitudeFiles = [firstLatitude, secondLatitude]
-radiusFiles = [firstRadius, secondRadius, thirdRadius, fourthRadius, fifthRadius]
-nutationFile = "data/nutation/nutation.csv"
-print(trueEclipticObliquity(2452930.312847, nutationFile, False))
+print(trueEclipticObliquity(2452930.312847, gregorian=False))
