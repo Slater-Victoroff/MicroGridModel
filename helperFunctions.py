@@ -219,7 +219,7 @@ def aberrationCorrection(gregorianDateTime, gregorian=True):
 def apparentSunLongitude(gregorianDateTime, gregorian=True):
 	longitudeNutation = nutation(gregorianDateTime, gregorian=gregorian)
 	aberration = aberrationCorrection(gregorianDateTime, gregorian=gregorian)
-	geocentricLongitude = celestialLongitude(gregorianDateTime, gregorian = gregorian, geocentric=sTrue)
+	geocentricLongitude = celestialLongitude(gregorianDateTime, gregorian = gregorian, geocentric=True)
 	return longitudeNutation + aberration + geocentricLongitude
 
 def apparentGreenwichSiderealTime(gregorianDateTime, gregorian=True):
@@ -228,54 +228,61 @@ def apparentGreenwichSiderealTime(gregorianDateTime, gregorian=True):
 	else:
 		JD = gregorianDateTime
 	JC = julianCentury(JD)
-	dailyTerm = lambda JD: 280.46061837+360.98564736629*(JD-2451545.0)
-	centuryTerm = lambda JC: (0.000387933*JC**2)-((JC**3)/38710000.0)
+	dailyTerm = lambda day: 280.46061837+360.98564736629*(day-2451545.0)
+	centuryTerm = lambda century: (0.000387933*(century**2))-((century**3)/38710000.0)
 	meanSiderealTime = degreesToRadians(dailyTerm(JD)+centuryTerm(JC))
-	normalizedMeanTime = np.arccos(np.cos(meanSiderealTime))
-	longitudeNutation = nutation(gregorianDateTime, gregorian)[0]
+	normalizedSiderealTime = (180/np.pi)*(np.arccos(np.cos(meanSiderealTime)))
+	longitudeNutation = (180/np.pi)*nutation(gregorianDateTime, gregorian=gregorian)[0]
 	obliquity = trueEclipticObliquity(gregorianDateTime, gregorian)
-	return meanSiderealTime+longitudeNutation*np.cos(obliquity)
+	return (2*np.pi)-degreesToRadians(normalizedSiderealTime+longitudeNutation*np.cos(obliquity))
 
 def geocentricSunCoordinates(gregorianDateTime, gregorian=True):
 	"""returns an array containing the geocentric right ascension and declination
 	of the sun"""
-	apparentSunLongitude = apparentSunLongitude(gregorianDateTime, gregorian=gregorian)
-	trueEclipticObliquity = trueEclipticObliquity(gregorianDateTime, gregorian=gregorian)
+	apparentLongitude = apparentSunLongitude(gregorianDateTime, gregorian=gregorian)
+	eclipticObliquity = trueEclipticObliquity(gregorianDateTime, gregorian=gregorian)
 	earthLatitude = celestialLatitude(gregorianDateTime, gregorian=gregorian, geocentric=True)
-	longitudeEcliptic = np.sin(apparentSunLongitude)*np.cos(trueEclipticObliquity)
-	latitudeEcliptic = np.tan(earthLatitude)*np.sin(trueEclipticObliquity)
-	rightAscension = np.arctan2((longitudeEcliptic-latitudeEcliptic),np.cos(apparentSunLongitude))
-	tripleProjection = np.cos(earthLatitude)*np.sin(trueEclipticObliquity)*np.sin(apparentSunLongitude)
-	crossLatitudeEcliptic = np.sin(earthLatitude)*np.cos(trueEclipticObliquity)
+	longitudeEcliptic = np.sin(apparentLongitude)*np.cos(eclipticObliquity)
+	latitudeEcliptic = np.tan(earthLatitude)*np.sin(eclipticObliquity)
+	rightAscension = (2*np.pi)+np.arctan2((longitudeEcliptic-latitudeEcliptic),np.cos(apparentLongitude))
+	tripleProjection = np.cos(earthLatitude)*np.sin(eclipticObliquity)*np.sin(apparentLongitude)
+	crossLatitudeEcliptic = np.sin(earthLatitude)*np.cos(eclipticObliquity)
 	declination = np.arcsin(tripleProjection+crossLatitudeEcliptic)
 	return np.array([rightAscension, declination])
 
-def localHourAngle(gregorianDatTime, latitude, degrees=True, gregorian=True):
+def localHourAngle(gregorianDateTime, longitude, degrees=True, gregorian=True):
 	"""Assumes the input latitude is in degrees, because sadly that's what
 	people use instead of radians, but converting it to radians internally.
 	latitude should be positive for east of Greenwich, and negative for
 	west of Greenwich return is measured westward from south"""
-	apparentGreenwichSiderealTime = apparentGreenwichSiderealTime(gregorianDateTime, gregorian)
+	greenwichSiderealTime = apparentGreenwichSiderealTime(gregorianDateTime, gregorian)
 	if degrees == True:
-		latitude = degreesToRadians(latitude)
+		longitude = degreesToRadians(longitude)
 	geocentricRightAscension = geocentricSunCoordinates(gregorianDateTime, gregorian)[0]
-	return np.arccos(np.cos(apparentGreenwichSiderealTime+realLatitude-geocentricRightAscension))
+	return np.arccos(np.cos(greenwichSiderealTime+longitude-geocentricRightAscension))
 
-def topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation, degrees=True, gregorian=True):
-	"""Returns numpy array with rightAscension, then declination, then local hour angle topographically"""
+def topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation, pressure, temperature, degrees=True, gregorian=True):
+	"""Returns numpy array with rightAscension, declination, local hour angle,
+	 zenith angle, then azimuth angle topographically.
+	 Latitude and longitude can be either in degrees or radians, just change the degrees
+	 flag accordingly. Pressure should be in millibars, and temperature should be in Celsius.
+	 elevation should be in meters.
+
+	 Longitude is positive east of Greenwich, and negative west of Greenwich. 
+	 Latitude is positive north of the equator, and negative south of the equator"""
 	if degrees == True:
 		latitude = degreesToRadians(latitude)
 		longitude = degreesToRadians(longitude)
 	equitorialHorizontalParallax = (8.794/3600)/radiusVector(gregorianDateTime,gregorian=gregorian)
-	trueLatitude = np.arctan(0.99664719*tan(latitude))
+	trueLatitude = np.arctan(0.99664719*np.tan(latitude))
 	x = np.cos(trueLatitude)+(elevation/6378140.)*np.cos(latitude)
 	y = 0.99664719*np.sin(trueLatitude)+(elevation/6378140.)*np.sin(latitude)
 	sunCoordiantes = geocentricSunCoordinates(gregorianDateTime, gregorian)
-	hourAngle = localHourAngle(gregorianDateTime, latitude,False, gregorian)
+	hourAngle = localHourAngle(gregorianDateTime, longitude,False, gregorian)
 	
 	#Right Ascension Calculation
 	raNumerator = -x*np.sin(equitorialHorizontalParallax)*np.sin(hourAngle)
-	raWDenominator = np.cos(sunCoordiantes[1])-(x*np.sin(equitorialHorizontalParallax)*hourAngle)
+	raDenominator = np.cos(sunCoordiantes[1])-(x*np.sin(equitorialHorizontalParallax)*hourAngle)
 	rightAscensionParallax = np.arctan2(raNumerator,raDenominator)
 	rightAscension = sunCoordiantes[0]+rightAscensionParallax
 
@@ -284,10 +291,26 @@ def topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation, de
 	declinationDenominator = np.cos(sunCoordiantes[1])-x*np.sin(equitorialHorizontalParallax)*np.cos(hourAngle)
 	declination = np.arctan2(declinationNumerator, declinationDenominator)
 
-	#Hour angle calculator
-	localHourAngle = hourAngle-rightAscensionParallax
+	#Hour angle calculation
+	trueHourAngle = hourAngle-rightAscensionParallax
 
-	return np.array([rightAscension, declination, localHourAngle])
+	#Zenith angle calculation
+	latitudeDeclination = np.sin(latitude)*np.sin(declination)
+	secondaryTerm = np.cos(latitude)*np.cos(declination)*np.cos(trueHourAngle)
+	elevationAngle = (180./np.pi)*np.arcsin(latitudeDeclination+secondaryTerm)
+	print elevationAngle
+	seeingApproximation = (pressure/1010.)*(283.0/(273+temperature))
+	degreeElevationTerm = 1.02/(60*np.tan(degreesToRadians(elevationAngle+(10.3/(elevationAngle+5.11)))))
+	atmosphericCorrection = degreesToRadians(seeingApproximation*degreeElevationTerm)
+	print atmosphericCorrection
+	zenithAngle = (np.pi/2)-(atmosphericCorrection+degreesToRadians(elevationAngle))
+
+	#Azimuth Angle Calculation
+	astronomersDenominator = np.cos(trueHourAngle)*np.sin(latitude)-np.tan(declination)*np.cos(latitude)
+	azimuthAngle = np.arctan2(np.sin(trueHourAngle),astronomersDenominator) + np.pi
+	#Azimuth angle here is measured eastward from North
+
+	return np.array([rightAscension, declination, trueHourAngle, zenithAngle, azimuthAngle])
 
 def degreesToRadians(degrees):
 	return degrees*(np.pi/180.0)
@@ -314,4 +337,5 @@ def parseDataToCsv(filePath):
 			print row
 			writer.writerow(row)
 
-print(celestialLongitude(2452930.312847, gregorian=False))
+#print apparentGreenwichSiderealTime(2452930.312847, False)
+print(topocentricCoordinates(2452930.312847,39.742476, -105.1786, 1830.14, 820, 11, True, gregorian=False))
