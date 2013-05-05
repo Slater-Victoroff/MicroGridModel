@@ -261,7 +261,8 @@ def localHourAngle(gregorianDateTime, longitude, degrees=True, gregorian=True):
 	geocentricRightAscension = geocentricSunCoordinates(gregorianDateTime, gregorian)[0]
 	return np.arccos(np.cos(greenwichSiderealTime+longitude-geocentricRightAscension))
 
-def topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation, pressure, temperature, degrees=True, gregorian=True):
+def topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation=840.0, 
+	pressure=1013.25, temperature=14, degrees=True, gregorian=True):
 	"""Returns numpy array with rightAscension, declination, local hour angle,
 	 zenith angle, then azimuth angle topographically.
 	 Latitude and longitude can be either in degrees or radians, just change the degrees
@@ -298,11 +299,9 @@ def topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation, pr
 	latitudeDeclination = np.sin(latitude)*np.sin(declination)
 	secondaryTerm = np.cos(latitude)*np.cos(declination)*np.cos(trueHourAngle)
 	elevationAngle = (180./np.pi)*np.arcsin(latitudeDeclination+secondaryTerm)
-	print elevationAngle
 	seeingApproximation = (pressure/1010.)*(283.0/(273+temperature))
 	degreeElevationTerm = 1.02/(60*np.tan(degreesToRadians(elevationAngle+(10.3/(elevationAngle+5.11)))))
 	atmosphericCorrection = degreesToRadians(seeingApproximation*degreeElevationTerm)
-	print atmosphericCorrection
 	zenithAngle = (np.pi/2)-(atmosphericCorrection+degreesToRadians(elevationAngle))
 
 	#Azimuth Angle Calculation
@@ -311,6 +310,22 @@ def topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation, pr
 	#Azimuth angle here is measured eastward from North
 
 	return np.array([rightAscension, declination, trueHourAngle, zenithAngle, azimuthAngle])
+
+def incidenceAngle(gregorianDateTime, latitude, longitude, slope, azimuthRotation,  
+ elevation=840.0, pressure=1013.25, temperature=14,degrees = True, gregorian = True):
+	"""aka the moneymaker. This will just directly give you the incidence angle for any given
+	plane on any day, anywhere in the world. Slope is the angle in degrees or radians (degrees argument)
+	measured from horizontal, azimuth rotation angle is positive if east from south, negative if west from south"""
+	if degrees==True:
+		slope = degreesToRadians(slope)
+		azimuthRotation = degreesToRadians(azimuthRotation)
+	topocentricOrientation = topocentricCoordinates(gregorianDateTime, latitude, longitude, elevation, 
+							pressure, temperature, degrees, gregorian)
+	firstTerm = np.cos(topocentricOrientation[3])*np.cos(slope)
+	relativeAzimuthalAngle = (topocentricOrientation[4] - np.pi)-azimuthRotation
+	secondTerm = np.sin(slope)*np.(sin(topocentricOrientation[3]))*np.cos(relativeAzimuthalAngle)
+	return np.arccos(firstTerm+secondTerm)
+
 
 def degreesToRadians(degrees):
 	return degrees*(np.pi/180.0)
