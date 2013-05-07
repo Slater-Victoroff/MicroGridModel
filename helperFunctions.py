@@ -279,7 +279,7 @@ class sunPrediction:
 		normalizedSiderealTime = (180/np.pi)*(np.arccos(np.cos(meanSiderealTime)))
 		longitudeNutation = (180/np.pi)*self.nutation(gregorianDateTime, gregorian=gregorian)[0]
 		obliquity = self.trueEclipticObliquity(gregorianDateTime, gregorian)
-		return (2*np.pi)-self.degreesToRadians(normalizedSiderealTime+longitudeNutation*np.cos(obliquity))
+		return self.degreesToRadians(normalizedSiderealTime+longitudeNutation*np.cos(obliquity))
 
 	def geocentricSunCoordinates(self, gregorianDateTime, gregorian=None):
 		gregorian = gregorian or self.gregorian
@@ -306,7 +306,7 @@ class sunPrediction:
 		degrees = degrees or self.degrees
 		greenwichSiderealTime = self.apparentGreenwichSiderealTime(gregorianDateTime, gregorian)
 		geocentricRightAscension = self.geocentricSunCoordinates(gregorianDateTime, gregorian)[0]
-		return np.arccos(np.cos(greenwichSiderealTime+longitude-geocentricRightAscension))
+		return (np.pi/2)-np.arccos(np.cos(greenwichSiderealTime+longitude-geocentricRightAscension))
 
 	def topocentricCoordinates(self, gregorianDateTime, latitude=None, longitude=None, elevation=None, 
 		pressure=None, temperature=None, degrees=None, gregorian=None):
@@ -387,6 +387,97 @@ class sunPrediction:
 	def degreesToRadians(self, degrees):
 		return degrees*(np.pi/180.0)
 
+	def radiansToDegrees(self, radians):
+		return radians*(180.0/np.pi)
+
+	def sunJunctions(self, gregorianDateTime, longitude = None, latitude=None,gregorian=None):
+		"""Returns an array with the sunrise, transit, and sunset times for a day"""
+		sunElevation = -0.8333 #degrees
+		gregorian = gregorian or self.gregorian
+		longitude = longitude or self.longitude
+		latitude = latitude or self.latitude
+		usedTime = datetime.datetime.combine(gregorianDateTime.date(),datetime.time(0,0))
+		greenwichTime = self.apparentGreenwichSiderealTime(usedTime, gregorian)
+		previousDay = usedTime-datetime.timedelta(days=1)
+		nextDay = usedTime+datetime.timedelta(days=1)
+		days = np.array([previousDay, usedTime, nextDay])
+		dayMatrix = np.array([self.geocentricSunCoordinates(day,gregorian) for day in days])
+
+		#In fraction of day
+		approxTransitTime = self.radiansToDegrees(dayMatrix[1][0]-latitude-greenwichTime)/360.
+		numerator = np.sin(self.degreesToRadians(sunElevation)-(np.sin(latitude)*np.sin(dayMatrix[1][1])))
+		denominator = np.cos(latitude)*np.cos(dayMatrix[1][1])
+		hourAngle = self.normalize(self.radiansToDegrees(np.arccos(numerator/denominator)),180)
+
+		approxSunriseTime = approxTransitTime-(hourAngle/360.)
+		approxSunsetTime = approxTransitTime+(hourAngle/360.)
+		approxSunriseTime = self.normalize(approxSunriseTime,1)
+		approxTransitTime = self.normalize(approxTransitTime,1)
+		approxSunsetTime = self.normalize(approxSunsetTime,1)
+		times = np.array([approxSunriseTime, approxTransitTime, approxSunsetTime])
+		greenwichTimes = self.radiansToDegrees(greenwichTime)+360.985647*times
+
+		a = self.radiansToDegrees(dayMatrix[1][0]-dayMatrix[0][0])
+		if abs(a) > 2:
+			a = a-int(a)
+		b = self.radiansToDegrees(dayMatrix[2][0]-dayMatrix[1][0])
+		if abs(b) > 2:
+			b=b-int(b)
+		c = b-a
+		at = self.radiansToDegrees(dayMatrix[1][1]-dayMatrix[0][1])
+		if abs(at)>2:
+			at=at-int(at)
+		bt = self.radiansToDegrees(dayMatrix[2][1]-dayMatrix[1][1])
+		if abs(bt)>2:
+			bt=bt-int(bt)
+		ct = bt-at
+
+		ascensionCalc = lambda x: self.radiansToDegrees(dayMatrix[1][0])+(x*(a+b+c*x))/2.0
+		ascensionVector = np.array([ascensionCalc(time) for time in times])
+		declinationCalc = lambda x: self.radiansToDegrees(dayMatrix[1][1])+(x*(at+bt+ct*x))/2.0
+		declinationVector = np.array([declinationCalc(time) for time in times])
+
+		rawLocalHourAngles = greenwichTimes+self.radiansToDegrees(longitude)-ascensionVector
+		localHourAngles = np.array([self.customHourAngleNormalization(entry, True) for entry in rawLocalHourAngles])
+		localHourAngles = self.degreesToRadians(localHourAngles)
+
+		latitudeDeclination = np.sin(latitude)*(np.sin(self.degreesToRadians(declinationVector)))
+		orthogonalHour = np.cos(latitude)*np.cos(self.degreesToRadians(declinationVector))*np.cos(localHourAngles)
+		sunAltitudes = np.arcsin(latitudeDeclination+orthogonalHour)
+		transitTime = approxTransitTime - (self.radiansToDegrees(localHourAngles[0])/360.)
+		
+		sunriseAltitudeDeviation = self.radiansToDegrees(sunAltitudes[1])-sunElevation
+		sunsetAltitudeDeviation =  self.radiansToDegrees(sunAltitudes[2])-sunElevation
+
+		sunriseAngleDeviation = np.cos(self.degreesToRadians(declinationVector[1]))*np.cos(latitude)*np.sin(localHourAngles[1])
+		sunsetAngleDeviation = np.cos(self.degreesToRadians(declinationVector[2]))*np.cos(latitude)*np.sin(localHourAngles[2])
+
+		print sunriseAngleDeviation
+		print sunsetAngleDeviation
+		sunriseTime = approxSunriseTime+(sunriseAltitudeDeviation/(360.*sunriseAngleDeviation))
+		sunsetTime = approxSunsetTime+(sunsetAltitudeDeviation/(360.*sunsetAngleDeviation))
+
+		return np.array([sunriseTime, transitTime, sunsetTime])
+
+	def normalize(self, number, scale):
+		ratio = number/float(scale)
+		delta = abs(ratio%1)
+		if number < 0:
+			return scale-scale*delta
+		else:
+			return scale*delta
+
+	def customHourAngleNormalization(self, angle, degrees = False):
+		if degrees == False:
+			angle = self.radiansToDegrees(angle)
+		angle += 360
+		newAngle = self.normalize(angle, 720.0)-360
+		if newAngle <= -180:
+			newAngle += 360
+		elif newAngle >= 180:
+			newAngle -= 360
+		return newAngle
+
 def parseDataToCsv(filePath):
 	with open(filePath, 'rb') as rawData:
 		counter = 0
@@ -411,14 +502,15 @@ def parseDataToCsv(filePath):
 
 #print apparentGreenwichSiderealTime(2452930.312847, False)
 #print(incidenceAngle(2452930.312847,39.742476, -105.1786, 30, -10, True, gregorian=False))
-longitude = -71.1786 #East of Greenwich is positive, West is negative
-latitude = 42.742476 #North of equator is positive, South is negative
-slope = 60.0 #Slope with respect to horizontal (angle)
+longitude = -105.1786 #East of Greenwich is positive, West is negative
+latitude = 39.742476 #North of equator is positive, South is negative
+slope = 30.0 #Slope with respect to horizontal (angle)
 azimuthRotation = -10.0 #Azimuthal angle of solar panel
 pressure = 1830.14 #Pressure in mbar
 elevation = 820.0 #elevation in meters
 temperature = 11.0 #temperature in c
 testing = sunPrediction(latitude, longitude, slope, azimuthRotation, elevation, pressure, temperature)
-test = datetime.datetime.now() + datetime.timedelta(hours=5)
+test = datetime.datetime(2003,10,17,20,30,30)
+#test = datetime.datetime.now() + datetime.timedelta(hours=-5)
 degrees = lambda x: (180./np.pi)*x
-print degrees(testing.incidenceAngle(test))
+print 24*testing.sunJunctions(test)
