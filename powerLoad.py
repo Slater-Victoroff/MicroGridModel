@@ -64,7 +64,7 @@ class PowerLoad:
 		plot.show()
 	
 def yearLoad(mean=2000):
-	test = PowerLoad(mean=mean, span=365, peakTime = 250, troughTime = 100, granularity = 1,hourlyNoise = [0.2,0.2,0.2,0.2,0.2,0.2,0.2])
+	test = PowerLoad(mean=mean, span=365, peakTime = 250, troughTime = 100, granularity = 1)
 	dayTest = PowerLoad(span=24, granularity=1)
 	testDay = test.constructDay()
 	allData = []

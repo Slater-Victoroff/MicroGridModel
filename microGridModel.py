@@ -5,14 +5,19 @@ from batteryModel import Battery
 
 import numpy as np
 import datetime as dt
+import matplotlib.pyplot as plot
+
+from scipy.optimize import minimize
+
+import cProfile
 
 class MicroGrid:
 
-	def __init__(self, latitude, longitude, year=2012, timezone=3, solarPrice=lambda x: 500*x,windPrice=lambda x: 500*x,
-		batteryPrice = lambda capacity:capacity*0.283,shortageCostFunction = lambda params: params[1]*0.11, 
+	def __init__(self, latitude, longitude, year=2012, timezone=3, solarPrice=lambda x: 500*x,windPrice=lambda x: 500*x**2,
+		batteryPrice = lambda capacity:capacity*0.283,shortageCostFunction = lambda params: params[1]*0.95, 
 		humanCost = lambda x: 1.5*x, humanEmergencyMax = 100, humanEfficiency = 0.7, inverterEfficiency=0.85,
 		chargeConverterEfficiency=0.9, solarEfficiency=0.17, windEfficiency=0.22, batterySize = np.array([6,220]), 
-		solarSize = 50, windSize = 10, batterySocBounds = np.array([0.2,0.9]), meanPower = 2000):
+		solarSize = 50, windSize = 13, batterySocBounds = np.array([0.2,0.9]), meanPower = 2000):
 		"""timezone is hours from utc, latitude and longitude should both be defined in degrees with standard signs.
 
 		the cost functions should ultimately be more sensible, but for now these should do. Currently the solar
@@ -39,7 +44,6 @@ class MicroGrid:
 		self.powerLoad = yearLoad(meanPower)
 		self.batteryModel = Battery(batterySize[0], batterySize[1], batterySocBounds)
 		self.price = solarPrice(solarSize) + windPrice(windSize) + batteryPrice(self.batteryModel.powerCapacity)
-		print ("Price: " + str(self.price))
 		self.shortageCost = shortageCostFunction
 		self.humanCost = humanCost
 		self.humanEmergencyMax = humanEmergencyMax
@@ -52,12 +56,14 @@ class MicroGrid:
 		self.timezone = timezone
 
 	def calculateCostFunction(self):
+		batteryStates = []
 		currentDay = 0
 		for day in self.powerLoad:
 			currentDate = dt.datetime(self.year,1,1) + dt.timedelta(days=currentDay)
 			for hour in day:
 				self.timeStep(currentDate, hour)
 				currentDate += dt.timedelta(hours=1)
+				batteryStates.append(self.batteryModel.storedPower)
 			currentDay += 1
 		return self.price
 
@@ -110,5 +116,17 @@ class MicroGrid:
 			else:
 				self.lostHours = 0
 
-test = MicroGrid(42,-71)
-print test.calculateCostFunction()
+def costFunction(sizes, latitude=42.36, longitude=-71.06):
+	batteryVoltage = 12
+	print sizes
+	test = MicroGrid(latitude, longitude, solarSize = sizes[0], windSize = sizes[1], batterySize = np.array([batteryVoltage,sizes[2]]))
+	cost = test.calculateCostFunction()
+	print cost
+	return cost
+
+boundaries = ((10,None),(1,None),(100,None))
+
+res = minimize(costFunction, (100, 10, 5000), method="L-BFGS-B", bounds = boundaries, options={"maxiter":100})
+
+#cProfile.run("costFunction([100,7,5000])")
+print res
