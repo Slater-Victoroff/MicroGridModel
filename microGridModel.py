@@ -40,7 +40,7 @@ class MicroGrid:
 		meanPower is currently the center of the powerload distribution, will include other powerLoad variables later,
 		but they seem like overkill for right now."""
 		self.solarModel = SolarModel(latitude, longitude, solarSize, solarEfficiency)
-		self.windModel = WindModel(windEfficiency, windSize)
+		self.windModel = WindModel(windSize, windEfficiency)
 		self.powerLoad = yearLoad(meanPower)
 		self.batteryModel = Battery(batterySize[0], batterySize[1], batterySocBounds)
 		self.price = solarPrice(solarSize) + windPrice(windSize) + batteryPrice(self.batteryModel.powerCapacity)

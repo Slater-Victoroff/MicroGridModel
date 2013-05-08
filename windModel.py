@@ -3,7 +3,7 @@ import datetime
 
 class WindModel:
 
-    def __init__(self, efficiency=0.22, rotorDiameter=2.1, airDensity = 1.2, windFunction=None, granularity = 24):
+    def __init__(self, rotorDiameter=2.1, efficiency=0.22, airDensity = 1.2, windFunction=None, granularity = 24):
         """Wind function is a lambda function based on a params variable
         that includes peak, vertShift, horizShift, and x"""
         self.airDensity = airDensity
