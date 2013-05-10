@@ -17,7 +17,7 @@ class MicroGrid:
 		batteryPrice = lambda capacity:capacity*0.283,shortageCostFunction = lambda params: params[1]*0.95, 
 		humanCost = lambda x: 1.5*x, humanEmergencyMax = 100, humanEfficiency = 0.7, inverterEfficiency=0.85,
 		chargeConverterEfficiency=0.9, solarEfficiency=0.17, windEfficiency=0.22, batterySize = np.array([6,220]), 
-		solarSize = 50, windSize = 13, batterySocBounds = np.array([0.2,0.9]), meanPower = 2000):
+		solarSize = 50, windSize = 13, batterySocBounds = np.array([0.2,0.9]), meanPower = 2000, granularity=1):
 		"""timezone is hours from utc, latitude and longitude should both be defined in degrees with standard signs.
 
 		the cost functions should ultimately be more sensible, but for now these should do. Currently the solar
@@ -38,10 +38,12 @@ class MicroGrid:
 		being in the form of [volts, amp hours]
 
 		meanPower is currently the center of the powerload distribution, will include other powerLoad variables later,
-		but they seem like overkill for right now."""
+		but they seem like overkill for right now.
+
+		granularity is your bin size in hours for the year of simulation"""
 		self.solarModel = SolarModel(latitude, longitude, solarSize, solarEfficiency)
 		self.windModel = WindModel(windSize, windEfficiency)
-		self.powerLoad = yearLoad(meanPower)
+		self.powerLoad = yearLoad(meanPower, granularity)
 		self.batteryModel = Battery(batterySize[0], batterySize[1], batterySocBounds)
 		self.price = solarPrice(solarSize) + windPrice(windSize) + batteryPrice(self.batteryModel.powerCapacity)
 		self.shortageCost = shortageCostFunction
@@ -62,30 +64,30 @@ class MicroGrid:
 			currentDate = dt.datetime(self.year,1,1) + dt.timedelta(days=currentDay)
 			for hour in day:
 				self.timeStep(currentDate, hour)
-				currentDate += dt.timedelta(hours=1)
+				currentDate += dt.timedelta(hours=self.granularity)
 				batteryStates.append(self.batteryModel.storedPower)
 			currentDay += 1
 		return self.price
 
 	def timeStep(self, dateTime, demand):
-		#print self.batteryModel.storedPower
+		"""Demand is coming in units of power draw in watts"""
 		trueDemand = demand/self.inverterEfficiency #Any power is going to come through the inverter
-		solar = self.solarModel.availableWattage(dateTime-dt.timedelta(hours=self.timezone))
-		wind = self.windModel.availableWattage(dateTime)
+		solarWatts = self.solarModel.availableWattage(dateTime-dt.timedelta(hours=self.timezone))
+		windWatts = self.windModel.availableWattage(dateTime)
 		#Power lost through charge conversion
 		self.energyWaste += (1-self.chargeConverterEfficiency)*(solar+wind)
 
 		usefulSolarWind = self.chargeConverterEfficiency*(solar+wind)
 		if usefulSolarWind >= trueDemand:
 			#Power lost to inverter
-			self.energyWaste += trueDemand-demand
-			#Efficiency is 1 since it's already been through the Charge converter
-			self.energyWaste += self.batteryModel.addEnergy(usefulSolarWind-trueDemand,1)
+			self.energyWaste += (trueDemand-demand)*self.granularity #Units of Wh
+			#Efficiency is effectively 1 since it's already been through the Charge converter
+			self.energyWaste += self.batteryModel.addEnergy((usefulSolarWind-trueDemand)*self.granularity,1)
 			self.lostHours = 0
 		else:
 			#Everything lost by shoving things through an inverter
-			self.energyWaste += (1-self.inverterEfficiency)*usefulSolarWind
-			remainingEnergy = trueDemand-usefulSolarWind
+			self.energyWaste += (1-self.inverterEfficiency)*usefulSolarWind*self.granularity
+			remainingEnergy = (trueDemand-usefulSolarWind)*self.granularity
 			#Again, the efficiency is one because the power at this point has
 			#already been calculated assumed it's gone through the inverter
 			batteryEnergyUsed = self.batteryModel.takeEnergy(remainingEnergy, 1)
@@ -93,25 +95,25 @@ class MicroGrid:
 			self.energyWaste += (1-self.inverterEfficiency)*batteryEnergyUsed
 			#If the battery wasn't enough
 			if remainingEnergy > 0:
-				self.lostHours += 1
+				self.lostHours += self.granularity
 				#Ignoring the inverter since humanPower would be going to either the battery or the 
 				#Already inverter-adjusted energy deficit.
 				maxHumanPower = self.humanEmergencyMax*self.humanEfficiency*self.chargeConverterEfficiency
-				self.price += self.humanCost(1)
-				self.energyWaste += self.humanEmergencyMax-maxHumanPower
+				self.price += self.humanCost(1)*self.granularity
+				self.energyWaste += (self.humanEmergencyMax-maxHumanPower)*self.granularity
 				#If the person is enough
 				if maxHumanPower >= remainingEnergy:
-					self.energyWaste += (1-self.inverterEfficiency)*maxHumanPower
+					self.energyWaste += ((1-self.inverterEfficiency)*maxHumanPower)*self.granularity
 					#This shouldn't actually increase energy waste at all, but if there's something
 					#Silly happening with the model this should catch it.
-					self.energyWaste += self.batteryModel.addEnergy(maxHumanPower-remainingEnergy,1)
+					self.energyWaste += self.batteryModel.addEnergy(maxHumanPower-remainingEnergy,1)*self.granularity
 				#Worst case scenario, power went out for this hour. Not sure how to calculate
 				#power waste for this.
 				else:
-					missedPower = remainingEnergy - maxHumanPower
+					missedEnergy = remainingEnergy - (maxHumanPower*self.granularity)
 					self.price += self.shortageCost(np.array([self.lostHours,missedPower]))
 					#Everything you generated this hour was a waste, probably not the best way to do this
-					self.energyWaste += trueDemand-missedPower
+					self.energyWaste += trueDemand-missedEnergy
 			#If we managed to meet evrything with the battery
 			else:
 				self.lostHours = 0

@@ -63,9 +63,10 @@ class PowerLoad:
 		plot.plot(values)
 		plot.show()
 	
-def yearLoad(mean=2000):
+def yearLoad(mean=2000, granularity=1):
+	"""granularity is your bin size for day plotting"""
 	test = PowerLoad(mean=mean, span=365, peakTime = 250, troughTime = 100, granularity = 1)
-	dayTest = PowerLoad(span=24, granularity=1)
+	dayTest = PowerLoad(span=24, granularity=granularity)
 	testDay = test.constructDay()
 	allData = []
 	for entry in testDay:

@@ -1,16 +1,19 @@
 import numpy as np
+import math
 import datetime
 
 class WindModel:
 
-    def __init__(self, rotorDiameter=2.1, efficiency=0.22, airDensity = 1.2, windFunction=None, granularity = 24):
+    def __init__(self, rotorDiameter=2.1, efficiency=0.22, airDensity = 1.2, cutInSpeed=2.5, ratedSpeed=14, windFunction=None):
         """Wind function is a lambda function based on a params variable
         that includes peak, vertShift, horizShift, and x"""
         self.airDensity = airDensity
         self.efficiency = efficiency
         self.rotorDiameter = rotorDiameter
-        self.granularity = 24 #number of chunks in a day
         defaultWind = lambda params: (params[0]-params[1])*2.17**((-(params[4]-params[2])**2)/params[3])+params[1]
+        self.ratedSpeed = ratedSpeed
+        self.cutInSpeed = cutInSpeed
+        self.maxPower = 0.5*self.efficiency*self.density*(ratedSpeed**3)*(np.pi/4.0)
         if windFunction:
             self.windFunction = windFunction
         else:
@@ -35,9 +38,20 @@ class WindModel:
         return self.windFunction(params)
 
     def availableWattage(self, datetime):
+        """Approximating a logistic trend in the power curve.
+        The magine 0.7783 number is the distance of the standard
+        logistic curve from 2% rails, but that number can be changed you like"""
+        logisticCurveRail = 0.7783
         windSpeed = self.wind(datetime)
-        maxPower = 0.5*self.airDensity*(windSpeed**3)*((np.pi*self.rotorDiameter**2)/4.0)
-        return self.efficiency*maxPower
+        if windSpeed<self.cutInSpeed:
+            return 0
+        elif windSpeed>self.ratedSpeed:
+            return self.maxPower
+        else:
+            logisticCurve = lambda x : 1/(1+math.exp(-x))
+            adjustedSpeed = windSpeed-(self.cutInSpeed+logisticCurveRail)
+            ratio = (2*logisticCurveRail)/(self.ratedSpeed-self.cutInSpeed)
+            return logisticCurve(ration*adjustedSpeed)
 
     def powerTest(self, providedPower = 900., speed=12.5, rotorDiameter=2.1):
         return providedPower/(0.5*self.airDensity*(speed**3)*((np.pi*rotorDiameter**2)/4.0))
