@@ -13,7 +13,7 @@ class WindModel:
         defaultWind = lambda params: (params[0]-params[1])*2.17**((-(params[4]-params[2])**2)/params[3])+params[1]
         self.ratedSpeed = ratedSpeed
         self.cutInSpeed = cutInSpeed
-        self.maxPower = 0.5*self.efficiency*self.density*(ratedSpeed**3)*(np.pi/4.0)
+        self.maxPower = 0.5*self.efficiency*self.airDensity*(ratedSpeed**3)*(np.pi/4.0)*self.rotorDiameter
         if windFunction:
             self.windFunction = windFunction
         else:
@@ -37,12 +37,12 @@ class WindModel:
             params = np.array([6.4,5.1,13.5,50., datetime.hour])
         return self.windFunction(params)
 
-    def availableWattage(self, datetime):
+    def availableWattage(self, datetime, wind=None):
         """Approximating a logistic trend in the power curve.
         The magine 0.7783 number is the distance of the standard
         logistic curve from 2% rails, but that number can be changed you like"""
         logisticCurveRail = 0.7783
-        windSpeed = self.wind(datetime)
+        windSpeed = wind or self.wind(datetime)
         if windSpeed<self.cutInSpeed:
             return 0
         elif windSpeed>self.ratedSpeed:
@@ -51,7 +51,9 @@ class WindModel:
             logisticCurve = lambda x : 1/(1+math.exp(-x))
             adjustedSpeed = windSpeed-(self.cutInSpeed+logisticCurveRail)
             ratio = (2*logisticCurveRail)/(self.ratedSpeed-self.cutInSpeed)
-            return logisticCurve(ration*adjustedSpeed)
+            return logisticCurve(ratio*adjustedSpeed)
 
+    def powerCurve(self, maximum, minimum, steps):
+        changes = (maximum-minimum)/steps
     def powerTest(self, providedPower = 900., speed=12.5, rotorDiameter=2.1):
         return providedPower/(0.5*self.airDensity*(speed**3)*((np.pi*rotorDiameter**2)/4.0))

@@ -5,7 +5,10 @@ import matplotlib.pyplot as plot
 
 class PowerLoad:
 
-	def __init__(self, mean=2000, peakHeight=None, peakTime=None, peakStDv=None, troughHeight=None, troughTime=None, troughStDv=None, span = 24, granularity=1, dailyNoise = [0.0,0.0,0.0,0.0,0.0,0.0,0.0], hourlyNoise = [0.0,0.0,0.0,0.0,0.0,0.0,0.0]):
+	def __init__(self, mean=2000, peakHeight=None, peakTime=None, peakStDv=None, 
+		troughHeight=None, troughTime=None, troughStDv=None, 
+		span = 24, granularity=1,dailyNoise = [0.0,0.0,0.0,0.0,0.0,0.0,0.0], 
+		hourlyNoise = [0.0,0.0,0.0,0.0,0.0,0.0,0.0]):
 		'''Mean is the average level of power consumption
 		peakHeight is the highest level of powerConsumption,
 		peakTime is the time at which that peak usually occurs,
